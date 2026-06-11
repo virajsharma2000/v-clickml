@@ -30,6 +30,7 @@ class Model(nn.Module):  # define a simple container Model
   for attribute in self.children():  # iterate over child modules attached to this model
    if dir(attribute) == dir(Residual()):  # compare attribute interface to a Residual instance's interface
     y = attribute(x, y)  # if it's a Residual-like module, call with (x, y)
+    y = x
 
    else:
     y = attribute(y)  # otherwise call the module with the single tensor y
