@@ -167,7 +167,8 @@ with col2:
                 torch.onnx.export(st.session_state['model'], x, f"{filename}.onnx")  # export model directly to file path
                 st.success(f"Exported {filename}.onnx, you can export by clicking download button below")  # show a success message in the UI
 
-                download_btn = st.download_button(label = "Export Model (.onnx)", file_name = f"{filename}.onnx", data = open(f"{filename}.onnx", 'rb').read(), mime = 'application/onnx-model')
+                download_btn = st.download_button(label = "Download Model (.onnx)", file_name = f"{filename}.onnx", data = open(f"{filename}.onnx", 'rb').read(), mime = 'application/onnx-model')
+                download_btn = st.download_button(label = "Download Model (.data) weights", file_name = f"{filename}.onnx.data", data = open(f"{filename}.onnx", 'rb').read(), mime = 'application/onnx-model')
 
                 if download_btn:
                  st.success('Downloaded successfully, enjoy your first model')
