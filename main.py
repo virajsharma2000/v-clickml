@@ -46,7 +46,7 @@ if 'model' not in st.session_state and 'attributes_applied' not in st.session_st
 
 
 @st.dialog("Enter the following parameters")  # declare a Streamlit dialog for entering constructor parameters
-def input_popup(keys, attribute, obj, attributes_applied):
+def input_popup(keys, attribute, obj):
  kwargs = {}  # dictionary to collect constructor keyword arguments from the dialog inputs
 
  for key in keys:
@@ -149,7 +149,7 @@ with col1:
 
                 if st.button(attribute, key = btn_key):  # render a button for each layer; when clicked:
                     st.session_state['attributes_applied'].append(attribute)  # record the attribute name in the applied list
-                    input_popup(keys, attribute, obj, attributes_applied)  # open the dialog to supply parameters
+                    input_popup(keys, attribute, obj)  # open the dialog to supply parameters
 
 with col2:
     st.subheader("Model Controls")  # header for the right column
@@ -163,13 +163,14 @@ with col2:
             try:
                 dims = tuple(int(dim.strip()) for dim in shape_input.split(",") if dim.strip())  # parse the comma-separated dims
                 x = torch.rand(dims)  # create a random tensor with the parsed dims
-                torch.onnx.export(model, x, f"{filename}.onnx")  # export model directly to file path
+                st.write(str(x == st.session_state['model'](x)))
+                torch.onnx.export(st.session_state['model'], x, f"{filename}.onnx")  # export model directly to file path
                 st.success(f"Exported {filename}.onnx, you can export by clicking download button below")  # show a success message in the UI
 
-                download_btn = st.download_button(label = "Download Model (.onnx)", file_name = f"{filename}.onnx", data = open(f"{filename}.onnx", 'rb').read(), mime = 'application/onnx-model')
+                download_btn = st.download_button(label = "Export Model (.onnx)", file_name = f"{filename}.onnx", data = open(f"{filename}.onnx", 'rb').read(), mime = 'application/onnx-model')
 
                 if download_btn:
                  st.success('Downloaded successfully, enjoy your first model')
 
             except Exception as e:
-                st.error(f"Export failed: {e}")  # show an error message if export fails# show an error message if export fails
+                st.error(f"Export failed: {e}")  # show an error message if export fails
