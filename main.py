@@ -29,7 +29,7 @@ class Model(nn.Module):  # define a simple container Model
 
   for attribute in self.children():  # iterate over child modules attached to this model
    if dir(attribute) == dir(Residual()):  # compare attribute interface to a Residual instance's interface
-    x = attribute(st.session_state['orignal_x'], y)  # if it's a Residual-like module, call with (x, y)
+    x = attribute(x, y)  # if it's a Residual-like module, call with (x, y)
     y = x
 
    else:
