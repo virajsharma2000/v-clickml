@@ -43,12 +43,9 @@ if 'model' not in st.session_state and 'attributes_applied' not in st.session_st
  st.session_state['model'] = model  # store the model object in Streamlit session state
  st.session_state['attributes_applied'] = []  # store a list of applied attribute names in session state
 
-model = st.session_state['model']  # retrieve the model from session state for local use
-attributes_applied = st.session_state['attributes_applied']  # retrieve the list of applied attributes
 
 @st.dialog("Enter the following parameters")  # declare a Streamlit dialog for entering constructor parameters
-def input_popup(keys, model, attribute, obj, attributes_applied):
- print(attribute)  # print attribute name to stdout (debugging)
+def input_popup(keys, attribute, obj, attributes_applied):
  kwargs = {}  # dictionary to collect constructor keyword arguments from the dialog inputs
 
  for key in keys:
@@ -67,20 +64,11 @@ def input_popup(keys, model, attribute, obj, attributes_applied):
    kwargs.update({key:argument})  # if the string is the literal 'True' or 'False', store a bool (note: keeps code as-is)
  
  if st.button('apply layer'):
-   number_of_same_attributes = attributes_applied.count(attribute)  # count how many times this attribute name has been applied
+   number_of_same_attributes = st.session_state['attributes_applied'].count(attribute) + 1 # count how many times this attribute name has been applied
 
-   setattr(model, attribute + '_' + str(number_of_same_attributes if number_of_same_attributes > 1 else ''), obj(**kwargs))
+   setattr(st.session_state['model'], attribute + '_' + str(number_of_same_attributes if number_of_same_attributes > 1 else ''), obj(**kwargs))
    st.success('Layer applied successfully')
    # attach the new layer instance to the model object using a generated attribute name and the parsed kwargs
-
-@st.dialog("Exporting Model")  # declare another dialog used for exporting/testing the model
-def test_model_input_popup():
- shape = st.text_input('Enter dummy input shape seperated with comma')  # input for a dummy tensor shape
- 
- if st.button('Test'):
-  x = torch.rand(tuple(int(dim) for dim in shape.split(',')))  # build a random tensor using the provided shape string
-  onnx_program = torch.onnx.export(model, x)  # export the model to ONNX format using torch.onnx.export
-  onnx_program.save('welcome_to_click_ml.onnx')  # save the exported ONNX program to a file
 
 # start the list of available attributes with the custom Residual entry
 attributes_and_names = [(Residual, (), 'Residual')]
@@ -149,27 +137,38 @@ filtered_attributes = [
     for (obj, keys, attribute) in attributes_and_names
     if query.lower() in attribute.lower()
 ]  # build a filtered list of attributes whose name contains the query (case-insensitive)
+
 with col1:
     st.subheader("Layer Library")  # header for the left column
+
     with st.expander("Available Layers", expanded=True):  # an expander that lists available layers
         for i, (obj, keys, attribute) in enumerate(filtered_attributes):  # enumerate filtered layers
             if attribute != 'sequential' and 'module' not in attribute.lower():  # filter out 'sequential' and names containing 'module'
                 btn_key = f'layer_btn_{i}_{attribute}'  # generate a unique Streamlit key for the button
-                if st.button(attribute, key=btn_key):  # render a button for each layer; when clicked:
-                    attributes_applied.append(attribute)  # record the attribute name in the applied list
-                    input_popup(keys, model, attribute, obj, attributes_applied)  # open the dialog to supply parameters
+
+                if st.button(attribute, key = btn_key):  # render a button for each layer; when clicked:
+                    st.session_state['attributes_applied'].append(attribute)  # record the attribute name in the applied list
+                    input_popup(keys, attribute, obj, attributes_applied)  # open the dialog to supply parameters
 
 with col2:
     st.subheader("Model Controls")  # header for the right column
     st.write("Use the form below to export or test the model (ONNX).")  # explanatory text
-    with st.form("export_form"):
-        shape_input = st.text_input("Dummy input shape (comma-separated)", value="1,3,224,224")  # default shape input
-        export_btn = st.form_submit_button("Export Model (.onnx)")  # form submit button for export
-        if export_btn:
+
+    shape_input = st.text_input("Dummy input shape (comma-separated)", value = "1,3,224,224")  # default shape input
+    filename = st.text_input("Enter file name")
+    export_btn = st.button(label = 'Export model (.onnx)')
+
+    if export_btn:
             try:
                 dims = tuple(int(dim.strip()) for dim in shape_input.split(",") if dim.strip())  # parse the comma-separated dims
                 x = torch.rand(dims)  # create a random tensor with the parsed dims
-                torch.onnx.export(model, x, "welcome_to_click_ml.onnx")  # export model directly to file path
-                st.success("Exported welcome_to_click_ml.onnx")  # show a success message in the UI
+                torch.onnx.export(model, x, f"{filename}.onnx")  # export model directly to file path
+                st.success(f"Exported {filename}.onnx, you can export by clicking download button below")  # show a success message in the UI
+
+                download_btn = st.download_button(label = "Download Model (.onnx)", file_name = f"{filename}.onnx", data = open(f"{filename}.onnx", 'rb').read(), mime = 'application/onnx-model')
+
+                if download_btn:
+                 st.success('Downloaded successfully, enjoy your first model')
+
             except Exception as e:
-                st.error(f"Export failed: {e}")  # show an error message if export fails
+                st.error(f"Export failed: {e}")  # show an error message if export fails# show an error message if export fails
