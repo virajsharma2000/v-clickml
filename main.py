@@ -163,7 +163,6 @@ with col2:
             try:
                 dims = tuple(int(dim.strip()) for dim in shape_input.split(",") if dim.strip())  # parse the comma-separated dims
                 x = torch.rand(dims)  # create a random tensor with the parsed dims
-                st.write(str(x == st.session_state['model'](x)))
                 torch.onnx.export(st.session_state['model'], x, f"{filename}.onnx")  # export model directly to file path
                 st.success(f"Exported {filename}.onnx, you can export by clicking download button below")  # show a success message in the UI
 
