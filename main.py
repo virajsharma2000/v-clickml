@@ -2,8 +2,10 @@ import streamlit as st  # Streamlit for building the UI
 import torch.nn as nn  # PyTorch neural network module namespace
 import inspect  # Python inspect to read signatures of classes/functions
 import torch  # PyTorch core
+import onnx
+import onnx2torch
 
-col1, col2 = st.columns([3, 5])  # create two columns in the Streamlit layout with relative widths
+col1, col2, col3 = st.columns([3, 5, 7])  # create two columns in the Streamlit layout with relative widths
 
 st.subheader('layers')  # render a subheader labeled 'layers'
 
@@ -46,7 +48,7 @@ if 'model' not in st.session_state and 'attributes_applied' not in st.session_st
 
 
 @st.dialog("Enter the following parameters")  # declare a Streamlit dialog for entering constructor parameters
-def input_popup(keys, attribute, obj):
+def input_popup(keys, attribute, obj, is_imported_layer):
  kwargs = {}  # dictionary to collect constructor keyword arguments from the dialog inputs
 
  for key in keys:
@@ -66,8 +68,13 @@ def input_popup(keys, attribute, obj):
  
  if st.button('apply layer'):
    number_of_same_attributes = st.session_state['attributes_applied'].count(attribute) + 1 # count how many times this attribute name has been applied
+   
+   if is_imported_layer:
+    setattr(st.session_state['model'], attribute + '_' + str(number_of_same_attributes if number_of_same_attributes > 1 else ''), obj)
 
-   setattr(st.session_state['model'], attribute + '_' + str(number_of_same_attributes if number_of_same_attributes > 1 else ''), obj(**kwargs))
+   else:
+    setattr(st.session_state['model'], attribute + '_' + str(number_of_same_attributes if number_of_same_attributes > 1 else ''), obj(**kwargs))
+
    st.success('Layer applied successfully')
    # attach the new layer instance to the model object using a generated attribute name and the parsed kwargs
 
@@ -139,17 +146,23 @@ filtered_attributes = [
     if query.lower() in attribute.lower()
 ]  # build a filtered list of attributes whose name contains the query (case-insensitive)
 
+if 'imported_layers' not in st.session_state:
+ st.session_state['imported_layers'] = []
+
 with col1:
     st.subheader("Layer Library")  # header for the left column
 
     with st.expander("Available Layers", expanded=True):  # an expander that lists available layers
         for i, (obj, keys, attribute) in enumerate(filtered_attributes):  # enumerate filtered layers
-            if attribute != 'sequential' and 'module' not in attribute.lower():  # filter out 'sequential' and names containing 'module'
+           sig = inspect.signature(obj)  # attempt to get the constructor signature
+           keys = list(sig.parameters.keys())  # collect parameter names from the signature
+                 
+           if attribute != 'sequential' and 'module' not in attribute.lower():  # filter out 'sequential' and names containing 'module'
                 btn_key = f'layer_btn_{i}_{attribute}'  # generate a unique Streamlit key for the button
 
                 if st.button(attribute, key = btn_key):  # render a button for each layer; when clicked:
                     st.session_state['attributes_applied'].append(attribute)  # record the attribute name in the applied list
-                    input_popup(keys, attribute, obj)  # open the dialog to supply parameters
+                    input_popup(keys, attribute, obj, False)  # open the dialog to supply parameters
 
 with col2:
     st.subheader("Model Controls")  # header for the right column
@@ -174,3 +187,34 @@ with col2:
 
             except Exception as e:
                 st.error(f"Export failed: {e}")  # show an error message if export fails
+
+    st.write('use the given below form to import layer')
+    uploaded_onnx = st.file_uploader("import layer (.onnx)", type = ["onnx"])
+    uploaded_data = st.file_uploader("import data (.data)", type = ["data"], max_upload_size = 10 ** 5)
+
+    if st.button('Import'):
+     with open(uploaded_data.name, 'wb') as f:
+      f.write(uploaded_data.getbuffer())
+
+     f.close()
+
+     layer = onnx.load(uploaded_onnx)
+     layer = onnx2torch.convert(layer)
+     st.session_state['imported_layers'].append((uploaded_onnx.name.split('.')[0], layer))
+
+with col3:
+     st.subheader('Imported Layers')
+     for attribute, layer in st.session_state['imported_layers']:
+      sig = inspect.signature(layer)  # attempt to get the constructor signature
+      keys = list(sig.parameters.keys())  # collect parameter names from the signature
+                 
+      btn_key = f'layer_btn_{i}_{attribute}'  # generate a unique Streamlit key for the button
+
+      if st.button(attribute, key = btn_key):  # render a button for each layer; when clicked:
+                    st.session_state['attributes_applied'].append(attribute)  # record the attribute name in the applied list
+                    input_popup(keys, attribute, layer, True)
+
+
+       
+
+             
