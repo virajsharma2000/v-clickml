@@ -80,11 +80,12 @@ def input_popup(keys, attribute, obj, is_imported_layer):
 
 # start the list of available attributes with the custom Residual entry
 attributes_and_names = [(Residual, (), 'Residual')]
+losses = []
 
 for attribute in dir(nn):  # iterate over attribute names in the torch.nn module
- if 'Loss' not in attribute:  # skip things that include 'Loss' in the name
-  obj = getattr(nn, attribute)  # get the object from nn by name
-
+ obj = getattr(nn, attribute) # get the object from nn by name
+ 
+ if 'Loss' not in attribute:  # skip things that include 'Loss' in the name 
   if isinstance(obj, type):  # only consider classes/types
             try:
                 sig = inspect.signature(obj)  # attempt to get the constructor signature
@@ -95,6 +96,8 @@ for attribute in dir(nn):  # iterate over attribute names in the torch.nn module
             except:
                 pass  # ignore any classes that can't be inspected
 
+ else:
+   losses.append((attribute))
 
  
 attributes_applied = []  # local list of attributes applied (kept for compatibility with existing UI code)
@@ -149,10 +152,13 @@ filtered_attributes = [
 if 'imported_layers' not in st.session_state:
  st.session_state['imported_layers'] = []
 
+if 'loss_used' not in st.session_state:
+ st.session_state['loss_used'] = ''
+
 with col1:
     st.subheader("Layer Library")  # header for the left column
 
-    with st.expander("Available Layers", expanded=True):  # an expander that lists available layers
+    with st.expander("Available Layers", expanded = False):  # an expander that lists available layers
         for i, (obj, keys, attribute) in enumerate(filtered_attributes):  # enumerate filtered layers
            sig = inspect.signature(obj)  # attempt to get the constructor signature
            keys = list(sig.parameters.keys())  # collect parameter names from the signature
@@ -163,6 +169,13 @@ with col1:
                 if st.button(attribute, key = btn_key):  # render a button for each layer; when clicked:
                     st.session_state['attributes_applied'].append(attribute)  # record the attribute name in the applied list
                     input_popup(keys, attribute, obj, False)  # open the dialog to supply parameters
+
+    st.subheader('losses')
+    
+    with st.expander('Available loss functions', expanded = False):
+     for loss in losses:
+      if st.button(loss):
+       st.session_state['loss_used'] = loss
 
 with col2:
     st.subheader("Model Controls")  # header for the right column
@@ -189,6 +202,7 @@ with col2:
                 st.error(f"Export failed: {e}")  # show an error message if export fails
 
     st.write('use the given below form to import layer')
+
     uploaded_onnx = st.file_uploader("import layer (.onnx)", type = ["onnx"])
     uploaded_data = st.file_uploader("import data (.data)", type = ["data"], max_upload_size = 10 ** 5)
 
@@ -202,6 +216,66 @@ with col2:
      layer = onnx2torch.convert(layer)
      st.session_state['imported_layers'].append((uploaded_onnx.name.split('.')[0], layer))
 
+    st.write('use the form given below to train the model')
+    
+    onnx_name = st.text_input('write model name')
+    dataset_name = st.text_input('write dataset name')
+    num_epochs = st.text_input('Enter number of epochs')
+    learning_rate = st.text_input('Enter learning rate')
+    num_batches = st.text_input('Enter number of batches')
+    
+    if st.button('Generate Training script'):
+     
+     print(st.session_state['loss_used'])
+     code = f"""
+
+import torch.nn as nn
+import torch.optim as optim
+import pandas as pd
+from onnx2pytorch import ConvertModel
+import onnx
+import torch
+
+model = onnx.load({onnx_name})
+model = ConvertModel(model)
+
+optimizer = optim.Adam(lr = {learning_rate}, params = model.parameters())
+loss_calculator = nn.{st.session_state['loss_used']}()
+
+ds = pd.read_csv('{dataset_name}')
+
+cols = ds.columns[:-1]
+
+x_dataset = torch.tensor([ds[col] for col in cols], dtype = torch.float32).T
+y_dataset = torch.tensor(ds[ds.columns[-1]], dtype = torch.float32)
+
+batch_no = 1
+
+for i in range({num_epochs}):
+ print('epoch', i + 1, 'batch no', batch_no, end = '\r')
+
+ for b in range(0, len(ds), {num_batches}):
+  batched_x_dataset = x_dataset[b: b + {num_batches}]
+  batched_y_dataset = y_dataset[b: b + {num_batches}].unsqueeze(1)
+
+  y_pred = model(batched_x_dataset)
+  loss = loss_calculator(y_pred, batched_y_dataset)
+
+  optimizer.zero_grad()
+  loss.backward()
+  optimizer.step()
+
+  batch_no += 1
+
+ batch_no = 1
+
+torch.save(model.state_dict(), 'logistic_regression.pth')
+ """  
+     st.success('Generated Training Script successfully, you can download it by clicking Download button below')
+
+     st.download_button(label = "Download Training Script", file_name = f"{onnx_name}_trainer.py", data = code, mime = 'text/x-python')
+     
+
 with col3:
      st.subheader('Imported Layers')
      for attribute, layer in st.session_state['imported_layers']:
@@ -213,8 +287,13 @@ with col3:
       if st.button(attribute, key = btn_key):  # render a button for each layer; when clicked:
                     st.session_state['attributes_applied'].append(attribute)  # record the attribute name in the applied list
                     input_popup(keys, attribute, layer, True)
+ 
+
+
+
 
 
        
+
 
              
