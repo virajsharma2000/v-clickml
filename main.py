@@ -236,7 +236,7 @@ from onnx2pytorch import ConvertModel
 import onnx
 import torch
 
-model = onnx.load({onnx_name})
+model = onnx.load('{onnx_name}.onnx')
 model = ConvertModel(model)
 
 optimizer = optim.Adam(lr = {learning_rate}, params = model.parameters())
@@ -252,7 +252,7 @@ y_dataset = torch.tensor(ds[ds.columns[-1]], dtype = torch.float32)
 batch_no = 1
 
 for i in range({num_epochs}):
- print('epoch', i + 1, 'batch no', batch_no, end = '\r')
+ print('epoch', i + 1, 'batch no', batch_no, end = '\\r')
 
  for b in range(0, len(ds), {num_batches}):
   batched_x_dataset = x_dataset[b: b + {num_batches}]
@@ -269,7 +269,7 @@ for i in range({num_epochs}):
 
  batch_no = 1
 
-torch.save(model.state_dict(), 'logistic_regression.pth')
+torch.save(model.state_dict(), '{onnx_name}_weights.pth')
  """  
      st.success('Generated Training Script successfully, you can download it by clicking Download button below')
 
