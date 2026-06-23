@@ -228,7 +228,6 @@ with col2:
      
      print(st.session_state['loss_used'])
      code = f"""
-
 import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
@@ -236,19 +235,16 @@ from onnx2pytorch import ConvertModel
 import onnx
 import torch
 
-model = onnx.load('{onnx_name}.onnx')
+model = onnx.load('{onnx_name}')
 model = ConvertModel(model)
 
 optimizer = optim.Adam(lr = {learning_rate}, params = model.parameters())
-loss_calculator = nn.{st.session_state['loss_used']}()
+loss_calculator = nn.BCELoss()
 
-ds = pd.read_csv('{dataset_name}')
+ds = pd.read_csv('{dataset_name}.csv')
 
-cols = ds.columns[:-1]
-
-x_dataset = torch.tensor([ds[col] for col in cols], dtype = torch.float32).T
-y_dataset = torch.tensor(ds[ds.columns[-1]], dtype = torch.float32)
-
+x_dataset = torch.tensor(ds.iloc[:, :-1].values, dtype = torch.float32)
+y_dataset = torch.tensor(ds.iloc[:, -1].values, dtype = torch.float32)
 batch_no = 1
 
 for i in range({num_epochs}):
@@ -270,6 +266,7 @@ for i in range({num_epochs}):
  batch_no = 1
 
 torch.save(model.state_dict(), '{onnx_name}_weights.pth')
+ 
  """  
      st.success('Generated Training Script successfully, you can download it by clicking Download button below')
 
