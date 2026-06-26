@@ -2,15 +2,17 @@ import streamlit as st  # Streamlit for building the UI
 import torch.nn as nn  # PyTorch neural network module namespace
 import inspect  # Python inspect to read signatures of classes/functions
 import torch  # PyTorch core
+import requests
 import onnx
+import onnx2pytorch
 import onnx2torch
+import io
 
 col1, col2, col3 = st.columns([3, 5, 7])  # create two columns in the Streamlit layout with relative widths
 
 st.subheader('layers')  # render a subheader labeled 'layers'
 
 # --- Help UI: sidebar and main-page guidance (added, no logic changes) ---
-
 st.info("Steps: 1) Filter layers → 2) Click layer → 3) Fill dialog → 4) Apply → 5) Export/Test on the right.")
 
 class Residual(nn.Module):  # define a custom Residual module
@@ -218,59 +220,50 @@ with col2:
 
     st.write('use the form given below to train the model')
     
-    onnx_name = st.text_input('write model name')
-    dataset_name = st.text_input('write dataset name')
+    onnx_model = st.file_uploader("import model (.onnx)", type = ["onnx"], key = 'model_import')
+    onnx_data = st.file_uploader("import model (.onnx)", type = ["data"], key = 'model_data_import')
+    dataset_name = st.text_input('write dataset name (from hugging face)')
     num_epochs = st.text_input('Enter number of epochs')
     learning_rate = st.text_input('Enter learning rate')
     num_batches = st.text_input('Enter number of batches')
-    
+    api_key = st.text_input('Enter your gemini api key for script generation')
+
     if st.button('Generate Training script'):
+     with open(onnx_model.name + '.data', 'wb') as f:
+       f.write(onnx_model.getbuffer())
+
+     f.close()
+
+     model = onnx.load(io.BytesIO(onnx_model.getbuffer()))
+     model = onnx2pytorch.ConvertModel(model)
+
+     system_prompt = f"""** Generate a custom training script for a model with architechture {str(model)} with parameters 
+                         1. Epoch num - {num_epochs}
+                         2. learning rate - {learning_rate}
+                         3. dataset - {dataset_name} from hugging face
+                         4. number of batches - {num_batches}
+                         5. model untrained onnx file name - {onnx_model.name} (must be loaded in script)
+
+                         ** Requirements (must be followed) - 
+                         1. **Load model's dataset only from hugging face**
+                         2. **Load the architechture only from path without writing the architechture on your own**
+                         3. **if the architechture does not match the dataset, just write print statment in the file saying that the architechture does not match dataset**
+                         4. **Don't add english explainations which harm the code execution
+                         ** Results user must get - 
+                         1. **after runningthe generated script the model mmust be trained and saved as weights using pt file
+                         2. **if the model's architechture does not match the given dataset, the error shown in the print statment without whole code
+                         3. **The code should be runnable when copying whole response, without normal english texts
+                         """
      
-     print(st.session_state['loss_used'])
-     code = f"""
-import torch.nn as nn
-import torch.optim as optim
-import pandas as pd
-from onnx2pytorch import ConvertModel
-import onnx
-import torch
+     payload = {"contents":[{"parts":[{"text":system_prompt}]}]}
 
-model = onnx.load('{onnx_name}')
-model = ConvertModel(model)
-
-optimizer = optim.Adam(lr = {learning_rate}, params = model.parameters())
-loss_calculator = nn.BCELoss()
-
-ds = pd.read_csv('{dataset_name}.csv')
-
-x_dataset = torch.tensor(ds.iloc[:, :-1].values, dtype = torch.float32)
-y_dataset = torch.tensor(ds.iloc[:, -1].values, dtype = torch.float32)
-batch_no = 1
-
-for i in range({num_epochs}):
- print('epoch', i + 1, 'batch no', batch_no, end = '\\r')
-
- for b in range(0, len(ds), {num_batches}):
-  batched_x_dataset = x_dataset[b: b + {num_batches}]
-  batched_y_dataset = y_dataset[b: b + {num_batches}].unsqueeze(1)
-
-  y_pred = model(batched_x_dataset)
-  loss = loss_calculator(y_pred, batched_y_dataset)
-
-  optimizer.zero_grad()
-  loss.backward()
-  optimizer.step()
-
-  batch_no += 1
-
- batch_no = 1
-
-torch.save(model.state_dict(), '{onnx_name}_weights.pth')
- 
- """  
+     response = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}", json = payload)
+     print(response.json())
+     code = response.json()['candidates'][0]['content']['parts'][0]['text'].replace('```', '').replace('python', '')
+     
      st.success('Generated Training Script successfully, you can download it by clicking Download button below')
 
-     st.download_button(label = "Download Training Script", file_name = f"{onnx_name}_trainer.py", data = code, mime = 'text/x-python')
+     st.download_button(label = "Download Training Script", file_name = f"{onnx_model.name.split('.')[0]}_trainer.py", data = code, mime = 'text/x-python')
      
 
 with col3:
@@ -291,6 +284,5 @@ with col3:
 
 
        
-
 
              
